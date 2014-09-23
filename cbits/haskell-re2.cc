@@ -164,4 +164,35 @@ bool haskell_re2_match(re2::RE2 *regex, const char *in, int in_len, int startpos
 	return true;
 }
 
+bool haskell_re2_matchpos(re2::RE2 *regex, const char *in, int in_len,
+                          int startpos, int endpos, int anchor, int num_captures,
+                          size_t **capture_poss,
+                          size_t **capture_lens,
+                          int *capture_count) {
+	if (num_captures < 0) {
+		num_captures = regex->NumberOfCapturingGroups() + 1;
+	}
+	*capture_count = num_captures;
+	re2::StringPiece *vec = new re2::StringPiece[num_captures];
+	if (!regex->Match(re2::StringPiece(in, in_len), startpos, endpos, re2::RE2::Anchor(anchor), vec, num_captures)) {
+		delete[] vec;
+		return false;
+	}
+	if (num_captures > 0) {
+		*capture_poss = HSRE2_MALLOC(size_t, num_captures);
+		*capture_lens = HSRE2_MALLOC(size_t, num_captures);
+		for (int ii = 0; ii < num_captures; ii++) {
+			if (vec[ii].data() == NULL) {
+				(*capture_poss)[ii] = -1;
+				(*capture_lens)[ii] = 0;
+			} else {
+				(*capture_poss)[ii] = vec[ii].data() - in;
+				(*capture_lens)[ii] = vec[ii].size();
+			}
+		}
+	}
+	delete[] vec;
+	return true;
+}
+
 }

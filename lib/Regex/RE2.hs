@@ -76,6 +76,7 @@ module Regex.RE2
 	, matchGroups
 	, Anchor(..)
 	, match
+	, matchPos
 	
 	-- * Searching
 	, find
@@ -473,6 +474,61 @@ match (Pattern fptr _) input startPos endPos anchor maxCaptures = unsafePerformI
 				vec <- peekCaptures (fromIntegral captureCount) captures captureLens
 				return (Just (Match vec))
 
+
+----------------------------------------------------------------------
+newtype MatchPoss = MatchPoss (V.Vector (Maybe (CSize, CSize)))
+	deriving (Eq, Show)
+
+matchPos :: Pattern
+      -> B.ByteString
+      -> Int -- ^ Start position
+      -> Int -- ^ End position
+      -> Maybe Anchor
+      -> Int -- ^ How many match groups to populate
+      -> Maybe MatchPoss
+matchPos (Pattern fptr _) input startPos endPos anchor maxCaptures = unsafePerformIO $
+	alloca $ \capturePossPtr ->
+	alloca $ \captureLensPtr ->
+	alloca $ \captureCountPtr ->
+	unsafeUseAsCStringIntLen input $ \(inPtr, inLen) ->
+	withForeignPtr fptr $ \patternPtr -> do
+		let cStartPos = fromIntegral (min startPos c_INT_MAX)
+		let cEndPos = fromIntegral (min endPos c_INT_MAX)
+		let cAnchor = case anchor of
+			Nothing -> 0
+			Just AnchorStart -> 1
+			Just AnchorBoth -> 2
+		let cMaxCaptures = fromIntegral (max maxCaptures 0)
+		matched <- c_matchpos patternPtr inPtr inLen cStartPos cEndPos cAnchor cMaxCaptures capturePossPtr captureLensPtr captureCountPtr
+		if not matched
+			then return Nothing
+			else do
+				capturePoss <- peek capturePossPtr
+				captureLens <- peek captureLensPtr
+				captureCount <- peek captureCountPtr
+				vec <- peekPatternPoss (fromIntegral captureCount) capturePoss captureLens
+				return (Just (MatchPoss vec))
+
+peekPatternPoss :: Int -> Ptr CSize -> Ptr CSize -> IO (V.Vector (Maybe (CSize,CSize)))
+peekPatternPoss 0 _ _ = return V.empty
+peekPatternPoss groupCount groupPoss groupNameLens = io where
+	io = do
+		vec <- V.new groupCount
+		loop vec 0
+		c_free groupPoss
+		c_free groupNameLens
+		V.freeze vec
+	loop _ idx | idx == groupCount = return ()
+	loop vec idx = do
+		pos <- peekElemOff groupPoss idx
+		if pos == -1
+			then V.write vec idx Nothing
+			else do
+				len <- peekElemOff groupNameLens idx
+				V.write vec idx (Just (pos, len))
+		loop vec (idx+1)
+
+
 -- | Attempt to find the pattern somewhere within the input.
 find :: Pattern -> B.ByteString -> Maybe Match
 find (Pattern fptr _) input = unsafePerformIO $
@@ -503,6 +559,16 @@ foreign import ccall "haskell-re2.h haskell_re2_match"
 	        -> Ptr (Ptr CString) -> Ptr (Ptr CSize) -- ^ Captures
 	        -> Ptr CInt -- ^ How many groups were captured
 	        -> IO Bool
+
+foreign import ccall "haskell-re2.h haskell_re2_matchpos"
+	c_matchpos :: Ptr Pattern
+	           -> CString -> CInt -- ^ Input
+	           -> CInt -> CInt -- ^ startpos, endpos
+	           -> CInt -- ^ anchor
+	           -> CInt -- ^ num captures, -1 to capture all groups
+	           -> Ptr (Ptr CSize) -> Ptr (Ptr CSize) -- ^ Captures
+	           -> Ptr CInt -- ^ How many groups were captured
+	           -> IO Bool
 
 -- | Replace the first occurance of the pattern with the given replacement
 -- template. If the template contains backslash escapes such as @\\1@, the
