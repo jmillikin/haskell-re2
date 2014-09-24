@@ -72,8 +72,11 @@ module Regex.RE2
 	
 	-- * Matching
 	, Match
+	, MatchPoss
 	, matchGroup
 	, matchGroups
+	, matchGroupPos
+	, matchGroupsPos
 	, Anchor(..)
 	, match
 	, matchPos
@@ -476,8 +479,17 @@ match (Pattern fptr _) input startPos endPos anchor maxCaptures = unsafePerformI
 
 
 ----------------------------------------------------------------------
-newtype MatchPoss = MatchPoss (V.Vector (Maybe (CSize, CSize)))
+newtype MatchPoss = MatchPoss (V.Vector (Maybe (Int, Int)))
 	deriving (Eq, Show)
+
+matchGroupPos :: MatchPoss -> Int -> Maybe (Int, Int)
+matchGroupPos (MatchPoss vals) idx = case vals V.!? idx of
+	Nothing -> Nothing
+	Just v -> v
+
+matchGroupsPos :: MatchPoss -> V.Vector (Maybe (Int, Int))
+matchGroupsPos (MatchPoss vals) = vals
+
 
 matchPos :: Pattern
       -> B.ByteString
@@ -509,7 +521,7 @@ matchPos (Pattern fptr _) input startPos endPos anchor maxCaptures = unsafePerfo
 				vec <- peekPatternPoss (fromIntegral captureCount) capturePoss captureLens
 				return (Just (MatchPoss vec))
 
-peekPatternPoss :: Int -> Ptr CSize -> Ptr CSize -> IO (V.Vector (Maybe (CSize,CSize)))
+peekPatternPoss :: Int -> Ptr CSize -> Ptr CSize -> IO (V.Vector (Maybe (Int,Int)))
 peekPatternPoss 0 _ _ = return V.empty
 peekPatternPoss groupCount groupPoss groupNameLens = io where
 	io = do
@@ -525,7 +537,7 @@ peekPatternPoss groupCount groupPoss groupNameLens = io where
 			then V.write vec idx Nothing
 			else do
 				len <- peekElemOff groupNameLens idx
-				V.write vec idx (Just (pos, len))
+				V.write vec idx (Just (fromIntegral pos, fromIntegral len))
 		loop vec (idx+1)
 
 
