@@ -54,6 +54,8 @@ bool haskell_re2_extract(re2::RE2 *regex, const char *in, int in_len, const char
 
 bool haskell_re2_match(re2::RE2 *regex, const char *in, int in_len, int startpos, int endpos, int anchor, int num_captures, char ***captures, size_t **capture_lens, int *capture_count);
 
+bool haskell_re2_matchpos(re2::RE2 *regex, const char *in, int in_len, int startpos, int endpos, int anchor, int num_captures, size_t **capture_poss, size_t **capture_lens, int *capture_count);
+
 #ifdef __cplusplus
 }
 #endif  // __cplusplus

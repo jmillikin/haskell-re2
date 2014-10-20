@@ -17,6 +17,7 @@ tests = suite "re2"
 	, test_CompileFailure
 	, test_PatternGroups
 	, test_Match
+	, test_MatchPos
 	, test_Find
 	, test_Replace
 	, test_ReplaceAll
@@ -62,6 +63,25 @@ test_Match = assertions "match" $ do
 		let Just m = found
 		$expect (equal (matchGroups m) (V.fromList
 			[ Just (b "bar")
+			]))
+
+test_MatchPos :: Test
+test_MatchPos = assertions "matchPos" $ do
+	p <- $requireRight (compile (b "(ba)r"))
+	do
+		let found = matchPos p (b "foo bar") 0 (length "foo bar") Nothing 0
+		$assert (just found)
+		let Just m = found
+		$expect (equal (matchGroupsPos m) (V.fromList []))
+	do
+		let found = matchPos p (b "foo bar") 0 (length "foo bar") (Just AnchorStart) 0
+		$assert (nothing found)
+	do
+		let found = matchPos p (b "foo bar") 0 (length "foo bar") Nothing 1
+		$assert (just found)
+		let Just m = found
+		$expect (equal (matchGroupsPos m) (V.fromList
+			[ Just (4, 3)
 			]))
 
 test_Find :: Test
